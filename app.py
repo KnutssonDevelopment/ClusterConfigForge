@@ -1,3 +1,10 @@
+# =================================================================
+# Cluster Config Forge
+# Author: Brian Knutsson - CRIT Solutions ApS
+# License: Custom MIT (Non-Commercial, Attribution Required)
+# This tool is provided AS-IS. Use at your own risk.
+# =================================================================
+
 import json
 import io
 import copy
