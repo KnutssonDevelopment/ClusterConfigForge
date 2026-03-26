@@ -1,3 +1,4 @@
 .env
 .idea
 Test-Files
+__pycache__/
