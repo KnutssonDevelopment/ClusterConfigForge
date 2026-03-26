@@ -1,0 +1,82 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Cluster Config Forge</title>
+    <style>
+        body { font-family: sans-serif; margin: 40px; background: #f4f4f9; }
+        .host-card { background: white; padding: 20px; margin-bottom: 20px; border-radius: 8px; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+        .vnic-row { display: flex; gap: 10px; margin-top: 10px; align-items: center; }
+        input { padding: 8px; border: 1px solid #ccc; border-radius: 4px; }
+        .btn { padding: 10px 20px; cursor: pointer; border: none; border-radius: 4px; background: #007bff; color: white; }
+        .save-btn { background: #28a745; margin-top: 20px; }
+    </style>
+</head>
+<body>
+    <h1>vCenter Cluster Configuration Helper</h1>
+    <p>Upload your JSON to convert "host-override" networking to "host-specific".</p>
+
+    <input type="file" id="fileInput" accept=".json">
+    <button class="btn" onclick="uploadJson()">Load Configuration</button>
+
+    <div id="hostContainer"></div>
+
+    <button id="saveBtn" class="btn save-btn" style="display:none;" onclick="saveJson()">Apply & Save JSON</button>
+
+    <script>
+        let loadedData = [];
+
+        async function uploadJson() {
+            const fileInput = document.getElementById('fileInput');
+            if (!fileInput.files[0]) return alert("Please select a file");
+
+            const formData = new FormData();
+            formData.append('file', fileInput.files[0]);
+
+            const response = await fetch('/upload', { method: 'POST', body: formData });
+            loadedData = await response.json();
+            renderHosts();
+        }
+
+        function renderHosts() {
+            const container = document.getElementById('hostContainer');
+            container.innerHTML = '';
+            loadedData.forEach((host, hIdx) => {
+                const html = `
+                    <div class="host-card">
+                        <h3>Host: ${host.hostname} <small>(${host.uuid})</small></h3>
+                        ${host.vnics.map((vnic, vIdx) => `
+                            <div class="vnic-row">
+                                <strong>${vnic.device}:</strong>
+                                IP: <input type="text" value="${vnic.ipv4}" onchange="updateData(${hIdx}, ${vIdx}, 'ipv4', this.value)">
+                                Mask: <input type="text" value="${vnic.mask}" onchange="updateData(${hIdx}, ${vIdx}, 'mask', this.value)">
+                            </div>
+                        `).join('')}
+                    </div>`;
+                container.innerHTML += html;
+            });
+            document.getElementById('saveBtn').style.display = 'block';
+        }
+
+        function updateData(hIdx, vIdx, field, value) {
+            loadedData[hIdx].vnics[vIdx][field] = value;
+        }
+
+        async function saveJson() {
+            const response = await fetch('/process', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(loadedData)
+            });
+            const blob = await response.blob();
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = "updated_config.json";
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+        }
+    </script>
+</body>
+</html>
