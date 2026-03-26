@@ -1,102 +1,76 @@
+from flask import Flask, render_template, request, redirect, url_for
 import json
-from flask import Flask, render_template, request, jsonify, send_file
-import io
 
 app = Flask(__name__)
 
-# Global storage for the loaded config (in-memory for local use)
-current_config = {}
+
+def extract_host_data(data):
+    """
+    Parses VMware Host Profile JSON structure to extract host details.
+    Ensures that even missing fields are initialized for the UI.
+    """
+    hosts = dict()
+    vmknic_list = set()
+
+    target_sections = ['host-override', 'host-specific']
+
+    for section in target_sections:
+        section_data = data.get(section, {})
+        for uuid, content in section_data.items():
+            esx_net = content.get('esx', {}).get('network', {})
+            net_stacks = esx_net.get('net_stacks', [])
+
+            # Extract Hostname
+            extracted_hostname = uuid
+            if isinstance(net_stacks, list) and len(net_stacks) > 0:
+                extracted_hostname = net_stacks[0].get('host_name', uuid)
+
+            # Extract Management IP (vmk0 logic)
+            vmknics = esx_net.get('vmknics', [])
+            for vmk in vmknics:
+                vmknic_list.add(vmk['device'])
+
+            # Append as an object for easier iteration in Jinja2
+            hosts[uuid] = {
+                "hostname": extracted_hostname,
+                "vmknics": dict()
+            }
+
+            device = dict()
+            for vmk in vmknics:
+                name = vmk['device']
+                hosts[uuid]['vmknics'][name] = {
+                    "ipv4_address": vmk['ip']['ipv4_address'],
+                    "ipv4_subnet_mask": vmk['ip']['ipv4_subnet_mask']
+                }
+
+    return hosts
 
 
 @app.route('/')
 def index():
-    return render_template('index.html')
+    return render_template('index.html', hosts=[])
 
 
-@app.route('/upload', methods=['POST'])
-def upload():
-    global current_config
-    file = request.files.get('file')
-    if not file:
-        return "No file uploaded", 400
+@app.route('/load-json', methods=['POST'])
+def load_json():
+    if 'file' not in request.files:
+        return redirect(url_for('index'))
 
-    current_config = json.load(file)
+    file = request.files['file']
+    if file.filename == '':
+        return redirect(url_for('index'))
 
-    # Extract existing data for the UI
-    hosts_data = []
-
-    # Check host-override for IP data
-    overrides = current_config.get('host-override', {})
-    for host_uuid, data in overrides.items():
-        host_info = {
-            "uuid": host_uuid,
-            "hostname": "",
-            "vnics": []
-        }
-
-        # Try to find a hostname in net_stacks
-        net_stacks = data.get('esx', {}).get('network', {}).get('net_stacks', [])
-        if isinstance(net_stacks, list) and len(net_stacks) > 0:
-            host_info['hostname'] = net_stacks[0].get('host_name', 'Unknown')
-
-        # Get VMKNICs
-        vmknics = data.get('esx', {}).get('network', {}).get('vmknics', [])
-        for vmk in vmknics:
-            ip_data = vmk.get('ip', {})
-            host_info['vnics'].append({
-                "device": vmk.get('device', 'unknown'),
-                "ipv4": ip_data.get('ipv4_address', ''),
-                "mask": ip_data.get('ipv4_subnet_mask', '')
-            })
-
-        hosts_data.append(host_info)
-
-    return jsonify(hosts_data)
+    try:
+        raw_data = json.load(file)
+        with open ("Test-Files/input.json", 'r') as file:
+            raw_data = json.load(file)
+        extracted_hosts = extract_host_data(raw_data)
+        return render_template('index.html', hosts=extracted_hosts)
+    except Exception as e:
+        print(f"Error parsing JSON: {e}")
+        return "Internal Server Error", 500
 
 
-@app.route('/process', methods=['POST'])
-def process():
-    global current_config
-    form_data = request.json
-
-    # Ensure host-specific section exists
-    if 'host-specific' not in current_config:
-        current_config['host-specific'] = {}
-
-    for host_entry in form_data:
-        uuid = host_entry['uuid']
-
-        # Initialize the specific structure vCenter expects
-        if uuid not in current_config['host-specific']:
-            current_config['host-specific'][uuid] = {"esx": {"network": {"vmknics": []}}}
-
-        new_vmknics = []
-        for vnic in host_entry['vnics']:
-            new_vmknics.append({
-                "device": vnic['device'],
-                "ip": {
-                    "ipv4_address": vnic['ipv4'],
-                    "ipv4_subnet_mask": vnic['mask']
-                }
-            })
-
-        current_config['host-specific'][uuid]['esx']['network']['vmknics'] = new_vmknics
-
-        # Optional: Clean the host-override section for these specific IP keys
-        # to prevent conflicts, or leave it if you want to keep other overrides.
-        if uuid in current_config.get('host-override', {}):
-            # Logic here to strip out IP addresses from override if moved to specific
-            pass
-
-    # Create a file-like object for the download
-    mem = io.BytesIO()
-    mem.write(json.dumps(current_config, indent=4).encode('utf-8'))
-    mem.seek(0)
-
-    return send_file(
-        mem,
-        mimetype='application/json',
-        as_attachment=True,
-        download_name='converted_vcenter_config.json'
-    )
-
+if __name__ == '__main__':
+    app.run(debug=True)
