@@ -10,7 +10,7 @@ app.secret_key = 'vmware_secret_key'
 def extract_host_data(data):
     hosts_dict = {}
     vmknic_set = set()
-    # We look in both sections to find existing hosts to display
+    # Check both sections to find hosts for the UI
     for section in ['host-override', 'host-specific']:
         section_data = data.get(section, {})
         for uuid, content in section_data.items():
@@ -33,7 +33,7 @@ def extract_host_data(data):
 
             hosts_dict[uuid] = {"uuid": uuid, "hostname": hostname, "vmknics": host_vmks}
 
-    # Ensure columns for vmk0-vmk4 are always present
+    # Ensure we show at least vmk0 to vmk4
     for i in range(5):
         vmknic_set.add(f"vmk{i}")
 
@@ -64,65 +64,74 @@ def generate_json():
     original = session['original_json']
     form = request.form
 
-    # 1. Find a template structure from existing data to preserve keys like 'defaultTcpipStack'
-    template_structure = {}
+    # 1. FIND MASTER TEMPLATE
+    # We find the first host-specific entry to use as a base for all others
+    master_template = {}
     for section in ['host-specific', 'host-override']:
         if section in original and original[section]:
             first_uuid = next(iter(original[section]))
-            template_structure = copy.deepcopy(original[section][first_uuid])
+            master_template = copy.deepcopy(original[section][first_uuid])
             break
 
-    # 2. Prepare the new JSON structure
-    # Remove host-override as requested
+    if not master_template:
+        return "Could not find a base host profile to use as template.", 400
+
+    # 2. PREPARE OUTPUT STRUCTURE
+    # Remove host-override and prepare a fresh host-specific section
     new_json = {k: v for k, v in original.items() if k != 'host-override'}
     new_json['host-specific'] = {}
 
-    # 3. Build host-specific entries from form data
-    # We group form data by UUID first
-    hosts_to_process = set()
+    # 3. IDENTIFY ALL HOSTS FROM FORM
+    uuids = set()
     for key in form.keys():
         if key.startswith('host['):
-            uuid = key.split('[')[1].split(']')[0]
-            hosts_to_process.add(uuid)
+            uuids.add(key.split('[')[1].split(']')[0])
 
-    for uuid in hosts_to_process:
-        # Create a new host entry based on the template
-        host_entry = copy.deepcopy(template_structure)
+    # 4. BUILD NEW ENTRIES BASED ON MASTER
+    for uuid in uuids:
+        # Start with a 100% identical copy of the master profile (DNS, NTP, etc. preserved)
+        new_host_entry = copy.deepcopy(master_template)
 
-        # Ensure path exists
-        if 'esx' not in host_entry: host_entry['esx'] = {}
-        if 'network' not in host_entry['esx']: host_entry['esx']['network'] = {}
-        net = host_entry['esx']['network']
+        # Access the network part safely
+        net = new_host_entry.get('esx', {}).get('network', {})
 
         # Update Hostname
         new_hostname = form.get(f'host[{uuid}][hostname]')
-        if 'net_stacks' not in net: net['net_stacks'] = [{"key": "defaultTcpipStack"}]
-        net['net_stacks'][0]['host_name'] = new_hostname
+        if 'net_stacks' in net and len(net['net_stacks']) > 0:
+            net['net_stacks'][0]['host_name'] = new_hostname
 
-        # Update/Rebuild VMKNICs
-        net['vmknics'] = []
+        # Update existing VMKNICs or add new ones if they don't exist in template
+        existing_vmks = net.get('vmknics', [])
+
         for i in range(10):  # Check vmk0-vmk9
             dev = f"vmk{i}"
             ip = form.get(f'host[{uuid}][{dev}][ip]')
             mask = form.get(f'host[{uuid}][{dev}][mask]')
 
             if ip or mask:
-                net['vmknics'].append({
-                    "device": dev,
-                    "ip": {
-                        "ipv4_address": ip or "",
-                        "ipv4_subnet_mask": mask or ""
-                    }
-                })
+                # Look for this device in the template's vmknics
+                target_vmk = next((v for v in existing_vmks if v['device'] == dev), None)
 
-        new_json['host-specific'][uuid] = host_entry
+                if target_vmk:
+                    # Update existing vmk from template
+                    target_vmk['ip']['ipv4_address'] = ip or ""
+                    target_vmk['ip']['ipv4_subnet_mask'] = mask or ""
+                else:
+                    # Add new vmk if it wasn't in the template
+                    existing_vmks.append({
+                        "device": dev,
+                        "ip": {"ipv4_address": ip or "", "ipv4_subnet_mask": mask or ""},
+                        # Default keys for new interfaces
+                        "enabled_services": {"management": False},
+                        "key": f"key-vim.host.VirtualNic-{dev}"
+                    })
 
-    # Generate file
+        new_json['host-specific'][uuid] = new_host_entry
+
     output = io.BytesIO()
     output.write(json.dumps(new_json, indent=2).encode('utf-8'))
     output.seek(0)
-    return send_file(output, mimetype='application/json', as_attachment=True,
-                     download_name='host_specific_profile.json')
+    return send_file(output, mimetype='application/json', as_attachment=True, download_name='final_host_profile.json')
 
 
 if __name__ == '__main__':
