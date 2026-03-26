@@ -14,7 +14,7 @@
 <body class="bg-light">
     <div class="container-fluid py-4">
         <div class="d-flex justify-content-between align-items-center mb-4">
-            <h2>ESXi Host Profile Editor</h2>
+            <h2>Cluster Config Forge</h2>
             {% if hosts %}<span class="badge bg-primary fs-6">{{ hosts|length }} Hosts Loaded</span>{% endif %}
         </div>
 
@@ -34,7 +34,7 @@
                         <input type="file" name="file" class="form-control" accept=".json" required>
                     </div>
                     <div class="col-auto d-flex align-items-end">
-                        <button type="submit" class="btn btn-primary px-4">Initialize Data</button>
+                        <button type="submit" class="btn btn-primary px-4">Load JSON</button>
                     </div>
                 </form>
             </div>
@@ -45,7 +45,7 @@
             <div class="card shadow">
                 <div class="card-header bg-dark text-white d-flex justify-content-between align-items-center py-3">
                     <h5 class="mb-0">Edit Profiles</h5>
-                    <button type="submit" class="btn btn-success fw-bold">Download Final Profile JSON</button>
+                    <button type="submit" class="btn btn-success fw-bold">Download Altered JSON</button>
                 </div>
                 <div class="card-body p-0 table-responsive" style="max-height: 75vh;">
                     <table class="table table-bordered table-hover mb-0">
