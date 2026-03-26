@@ -80,25 +80,18 @@ def generate_json():
         new_host_entry = copy.deepcopy(master_template)
         net = new_host_entry.get('esx', {}).get('network', {})
 
-        # Update Hostname
         new_hostname = form.get(f'host[{uuid}][hostname]')
         if 'net_stacks' in net and len(net['net_stacks']) > 0:
             net['net_stacks'][0]['host_name'] = new_hostname
 
-        # Update/Rebuild VMKNICs
         existing_vmks = net.get('vmknics', [])
-
-        # We ensure at least vmk0-vmk4 are processed as per the UI
         for i in range(10):
             dev = f"vmk{i}"
             ip = form.get(f'host[{uuid}][{dev}][ip]')
             mask = form.get(f'host[{uuid}][{dev}][mask]')
 
-            # Logic: If field is in form but empty, use 0.0.0.0
-            # If field is not in form at all, we only add it if it's vmk0-vmk4
             if ip is not None or mask is not None or i < 5:
                 target_vmk = next((v for v in existing_vmks if v['device'] == dev), None)
-
                 final_ip = ip if (ip and ip.strip()) else "0.0.0.0"
                 final_mask = mask if (mask and mask.strip()) else "0.0.0.0"
 
@@ -112,7 +105,6 @@ def generate_json():
                         "enabled_services": {"management": (dev == "vmk0")},
                         "key": f"key-vim.host.VirtualNic-{dev}"
                     })
-
         new_json['host-specific'][uuid] = new_host_entry
 
     output = io.BytesIO()
