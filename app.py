@@ -1,77 +1,128 @@
-from flask import Flask, render_template, request, redirect, url_for
+from flask import Flask, render_template, request, send_file, session
 import json
+import io
+import copy
 
 app = Flask(__name__)
+app.secret_key = 'vmware_secret_key'
 
 
 def extract_host_data(data):
-    """
-    Parses VMware Host Profile JSON structure to extract host details.
-    Maps vmk devices dynamically to each host.
-    """
-    hosts = dict()
-    vmknic_set = set()  # Track all unique vmk devices found across all hosts
-
-    target_sections = ['host-override', 'host-specific']
-
-    for section in target_sections:
+    hosts_dict = {}
+    vmknic_set = set()
+    # We look in both sections to find existing hosts to display
+    for section in ['host-override', 'host-specific']:
         section_data = data.get(section, {})
         for uuid, content in section_data.items():
             esx_net = content.get('esx', {}).get('network', {})
             net_stacks = esx_net.get('net_stacks', [])
 
-            # Extract Hostname
-            extracted_hostname = uuid
+            hostname = uuid
             if isinstance(net_stacks, list) and len(net_stacks) > 0:
-                extracted_hostname = net_stacks[0].get('host_name', uuid)
+                hostname = net_stacks[0].get('host_name', uuid)
 
             vmknics = esx_net.get('vmknics', [])
-
-            # Initialize host entry
-            hosts[uuid] = {
-                "hostname": extracted_hostname,
-                "vmknics": {}
-            }
-
+            host_vmks = {}
             for vmk in vmknics:
                 name = vmk['device']
-                vmknic_set.add(name)  # Add to global list for table columns
-
-                hosts[uuid]['vmknics'][name] = {
+                vmknic_set.add(name)
+                host_vmks[name] = {
                     "ipv4_address": vmk.get('ip', {}).get('ipv4_address', ""),
                     "ipv4_subnet_mask": vmk.get('ip', {}).get('ipv4_subnet_mask', "")
                 }
 
-    # Sort vmk list alphabetically (vmk0, vmk1...)
-    sorted_vmknics = sorted(list(vmknic_set))
+            hosts_dict[uuid] = {"uuid": uuid, "hostname": hostname, "vmknics": host_vmks}
 
-    return hosts, sorted_vmknics
+    # Ensure columns for vmk0-vmk4 are always present
+    for i in range(5):
+        vmknic_set.add(f"vmk{i}")
+
+    sorted_hosts = sorted(hosts_dict.values(), key=lambda x: x['hostname'].lower())
+    return sorted_hosts, sorted(list(vmknic_set))
 
 
 @app.route('/')
 def index():
-    return render_template('index.html', hosts={}, vmk_columns=[])
+    return render_template('index.html', hosts=[], vmk_columns=[])
 
 
 @app.route('/load-json', methods=['POST'])
 def load_json():
-    if 'file' not in request.files:
-        return redirect(url_for('index'))
+    file = request.files.get('file')
+    if not file: return "No file", 400
+    raw_data = json.load(file)
+    session['original_json'] = raw_data
+    hosts, vmk_columns = extract_host_data(raw_data)
+    return render_template('index.html', hosts=hosts, vmk_columns=vmk_columns)
 
-    file = request.files['file']
-    if file.filename == '':
-        return redirect(url_for('index'))
 
-    try:
-        raw_data = json.load(file)
-        hosts, vmk_columns = extract_host_data(raw_data)
+@app.route('/generate-json', methods=['POST'])
+def generate_json():
+    if 'original_json' not in session:
+        return "No session data found", 400
 
-        return render_template('index.html',
-                               hosts=hosts,
-                               vmk_columns=vmk_columns)
-    except Exception as e:
-        print(f"Error: {e}")
-        return f"Error parsing JSON: {str(e)}", 500
+    original = session['original_json']
+    form = request.form
+
+    # 1. Find a template structure from existing data to preserve keys like 'defaultTcpipStack'
+    template_structure = {}
+    for section in ['host-specific', 'host-override']:
+        if section in original and original[section]:
+            first_uuid = next(iter(original[section]))
+            template_structure = copy.deepcopy(original[section][first_uuid])
+            break
+
+    # 2. Prepare the new JSON structure
+    # Remove host-override as requested
+    new_json = {k: v for k, v in original.items() if k != 'host-override'}
+    new_json['host-specific'] = {}
+
+    # 3. Build host-specific entries from form data
+    # We group form data by UUID first
+    hosts_to_process = set()
+    for key in form.keys():
+        if key.startswith('host['):
+            uuid = key.split('[')[1].split(']')[0]
+            hosts_to_process.add(uuid)
+
+    for uuid in hosts_to_process:
+        # Create a new host entry based on the template
+        host_entry = copy.deepcopy(template_structure)
+
+        # Ensure path exists
+        if 'esx' not in host_entry: host_entry['esx'] = {}
+        if 'network' not in host_entry['esx']: host_entry['esx']['network'] = {}
+        net = host_entry['esx']['network']
+
+        # Update Hostname
+        new_hostname = form.get(f'host[{uuid}][hostname]')
+        if 'net_stacks' not in net: net['net_stacks'] = [{"key": "defaultTcpipStack"}]
+        net['net_stacks'][0]['host_name'] = new_hostname
+
+        # Update/Rebuild VMKNICs
+        net['vmknics'] = []
+        for i in range(10):  # Check vmk0-vmk9
+            dev = f"vmk{i}"
+            ip = form.get(f'host[{uuid}][{dev}][ip]')
+            mask = form.get(f'host[{uuid}][{dev}][mask]')
+
+            if ip or mask:
+                net['vmknics'].append({
+                    "device": dev,
+                    "ip": {
+                        "ipv4_address": ip or "",
+                        "ipv4_subnet_mask": mask or ""
+                    }
+                })
+
+        new_json['host-specific'][uuid] = host_entry
+
+    # Generate file
+    output = io.BytesIO()
+    output.write(json.dumps(new_json, indent=2).encode('utf-8'))
+    output.seek(0)
+    return send_file(output, mimetype='application/json', as_attachment=True,
+                     download_name='host_specific_profile.json')
 
 
 if __name__ == '__main__':
