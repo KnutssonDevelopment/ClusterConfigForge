@@ -7,10 +7,10 @@ app = Flask(__name__)
 def extract_host_data(data):
     """
     Parses VMware Host Profile JSON structure to extract host details.
-    Ensures that even missing fields are initialized for the UI.
+    Maps vmk devices dynamically to each host.
     """
     hosts = dict()
-    vmknic_list = set()
+    vmknic_set = set()  # Track all unique vmk devices found across all hosts
 
     target_sections = ['host-override', 'host-specific']
 
@@ -25,31 +25,32 @@ def extract_host_data(data):
             if isinstance(net_stacks, list) and len(net_stacks) > 0:
                 extracted_hostname = net_stacks[0].get('host_name', uuid)
 
-            # Extract Management IP (vmk0 logic)
             vmknics = esx_net.get('vmknics', [])
-            for vmk in vmknics:
-                vmknic_list.add(vmk['device'])
 
-            # Append as an object for easier iteration in Jinja2
+            # Initialize host entry
             hosts[uuid] = {
                 "hostname": extracted_hostname,
-                "vmknics": dict()
+                "vmknics": {}
             }
 
-            device = dict()
             for vmk in vmknics:
                 name = vmk['device']
+                vmknic_set.add(name)  # Add to global list for table columns
+
                 hosts[uuid]['vmknics'][name] = {
-                    "ipv4_address": vmk['ip']['ipv4_address'],
-                    "ipv4_subnet_mask": vmk['ip']['ipv4_subnet_mask']
+                    "ipv4_address": vmk.get('ip', {}).get('ipv4_address', ""),
+                    "ipv4_subnet_mask": vmk.get('ip', {}).get('ipv4_subnet_mask', "")
                 }
 
-    return hosts
+    # Sort vmk list alphabetically (vmk0, vmk1...)
+    sorted_vmknics = sorted(list(vmknic_set))
+
+    return hosts, sorted_vmknics
 
 
 @app.route('/')
 def index():
-    return render_template('index.html', hosts=[])
+    return render_template('index.html', hosts={}, vmk_columns=[])
 
 
 @app.route('/load-json', methods=['POST'])
@@ -63,13 +64,14 @@ def load_json():
 
     try:
         raw_data = json.load(file)
-        with open ("Test-Files/input.json", 'r') as file:
-            raw_data = json.load(file)
-        extracted_hosts = extract_host_data(raw_data)
-        return render_template('index.html', hosts=extracted_hosts)
+        hosts, vmk_columns = extract_host_data(raw_data)
+
+        return render_template('index.html',
+                               hosts=hosts,
+                               vmk_columns=vmk_columns)
     except Exception as e:
-        print(f"Error parsing JSON: {e}")
-        return "Internal Server Error", 500
+        print(f"Error: {e}")
+        return f"Error parsing JSON: {str(e)}", 500
 
 
 if __name__ == '__main__':
