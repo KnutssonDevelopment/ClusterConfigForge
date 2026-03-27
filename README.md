@@ -26,6 +26,19 @@ If you don't want to install Python locally, you can run the Forge using Docker:
 
 2. Open your browser at `http://127.0.0.1:5000`
 
+
+
+## **Try it Online**
+
+Don’t want to run Docker locally? You can access the tool immediately via our cloud-hosted version: **[Launch Cluster Config Forge on Render](https://cluster-config-forge.onrender.com/)**
+
+> **Note on Privacy & Security:** Your data is processed entirely **in-memory** and is never stored on our servers. However, when uploading sensitive configuration data to the internet, we recommend a “safety first” approach:
+>
+> - **Sanitize your JSON:** Manually remove or obfuscate the `password_hash` values before uploading.
+> - **Use Temporary Credentials:** Only use the forge with temporary installation passwords. While we take every precaution to keep your session private, there are never absolute guarantees on the public web—staying proactive with your sensitive data is always the best practice.
+
+
+
 ## Workflow
 1. Configure the first host with advanced settings, vmknic and ip configuration
 2. Create a Cluster Configuration based on that host
