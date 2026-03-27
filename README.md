@@ -18,13 +18,13 @@ A Flask-based web tool to batch-edit vSphere Cluster Configuration JSON files.
 
 If you don't want to install Python locally, you can run the Forge using Docker:
 
-1. **Build the image:**
-   `docker build -t cluster-config-forge .`
+### 1. Run the container
 
-2. **Run the container:**
-   `docker run -p 5000:5000 cluster-config-forge`
+1. Pull and run the latest image directly from Docker Hub:
 
-3. Open your browser at `http://localhost:5000`
+```docker run -d --rm -p 5000:5000 --name ccf knutssondevelopment/cluster-config-forge:latest```
+
+2. Open your browser at `http://127.0.0.1:5000`
 
 ## Workflow
 1. Configure the first host with advanced settings, vmknic and ip configuration
