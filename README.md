@@ -47,3 +47,13 @@ Backup: Always keep a backup of your original configuration JSON file before usi
 
 ## Known Issues
 There are no known issues. If you find any please create an issue report on github: https://github.com/KnutssonDevelopment/ClusterConfigForge/issues
+
+---
+
+## ☕ Support the Project
+
+If **ClusterConfigForge** has saved you time or made your vSphere administration a little easier, consider supporting the project! Your support helps keep the tools updated and the servers running.
+
+[![Buy Me A Coffee](https://img.shields.io/badge/Buy%20Me%20A%20Coffee-Donate-orange?style=for-the-badge&logo=buy-me-a-coffee)](https://buymeacoffee.com/knutssondevelopment)
+
+---
