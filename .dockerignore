@@ -1,4 +1,9 @@
+__pycache__
+*.pyc
 .venv
+.git
+.uv
+*.json
 .idea
 Test-Files
 __pycache__/
