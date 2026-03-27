@@ -9,6 +9,7 @@ import json
 import io
 import copy
 from flask import Flask, render_template, request, send_file, session, flash
+import helpers
 
 app = Flask(__name__)
 app.secret_key = 'vmware_secret_key_change_this_in_production'
@@ -88,24 +89,28 @@ def generate_json():
         return "No session data found", 400
 
     original = session['original_json']
+
+    # Create a new dictionary for later export
+    new_json = copy.deepcopy(original)
+
+    # Remove the host overrides
+    try:
+        del new_json['host-override']
+    except KeyError:
+        pass
+
     form = request.form
 
-    # 1. Identify Master Template from first host-specific or override
-    master_template = {}
-    for sec in ['host-specific', 'host-override']:
-        if original.get(sec):
-            first_uuid = next(iter(original[sec]))
-            master_template = copy.deepcopy(original[sec][first_uuid])
-            break
+    # Identify Master Template from most descriptive host-specific
+    uuids = original.get('host-specific')
+    sections = [original.get('host-specific')[u] for u in uuids]
+    master_template = copy.deepcopy(helpers.get_biggest_dict(sections))
 
+    # TODO: We might have to generate a master template
     if not master_template:
         return "No valid host template found in JSON", 400
 
-    # 2. Reconstruct JSON: Remove override, build fresh host-specific
-    new_json = {k: v for k, v in original.items() if k != 'host-override'}
-    new_json['host-specific'] = {}
-
-    # 3. Process hosts from form
+    # Process hosts from form
     uuids = set(key.split('[')[1].split(']')[0] for key in form.keys() if key.startswith('host['))
 
     for uuid in uuids:
@@ -118,11 +123,12 @@ def generate_json():
             net['net_stacks'][0]['host_name'] = new_hostname
 
         # Update/Inject VMKNICs
-        existing_vmks = net.setdefault('vmknics', [])
+        existing_vmks = host_entry.get('esx', {}).get('network', {}).get('vmknics', [])
+        #existing_vmks = net.setdefault('vmknics', [])
 
-        # We handle vmk0 to vmk9
-        for i in range(10):
-            dev = f"vmk{i}"
+        # Go trough all vmkernel adaptors
+        for vmk in existing_vmks:
+            dev = vmk.get('device')
             ip = form.get(f'host[{uuid}][{dev}][ip]')
             mask = form.get(f'host[{uuid}][{dev}][mask]')
 
@@ -148,7 +154,7 @@ def generate_json():
         new_json['host-specific'][uuid] = host_entry
 
     output = io.BytesIO()
-    output.write(json.dumps(new_json, indent=2).encode('utf-8'))
+    output.write(json.dumps(new_json, indent=4).encode('utf-8'))
     output.seek(0)
     return send_file(output, mimetype='application/json', as_attachment=True, download_name='updated_host_profile.json')
 
