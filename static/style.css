@@ -1,0 +1,149 @@
+/* * Cluster Config Forge - Global Stylesheet
+# Author: Brian Knutsson - CRIT Solutions ApS
+ */
+
+/* Base Styling */
+body {
+    background-color: #f4f7f9;
+    font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+}
+
+/* Hero Section */
+.hero-section {
+    background: linear-gradient(135deg, #1a1c2c 0%, #4a192c 100%);
+    color: white;
+    padding: 60px 0;
+    margin-bottom: 40px;
+    border-bottom: 4px solid #0d6efd;
+    box-shadow: 0 4px 15px rgba(0,0,0,0.2);
+}
+
+.hero-title {
+    font-weight: 800;
+    letter-spacing: -1px;
+    font-size: 2.5rem;
+    margin-bottom: 10px;
+}
+
+.hero-subtitle {
+    font-weight: 300;
+    font-size: 1.1rem;
+    opacity: 0.85;
+}
+
+/* Upload & Drop Zone */
+.upload-container {
+    max-width: 800px;
+    margin: -80px auto 40px auto;
+}
+
+.drop-zone {
+    background: white;
+    border: 2px dashed #cbd5e0;
+    border-radius: 16px;
+    padding: 40px;
+    text-align: center;
+    transition: all 0.3s ease;
+    cursor: pointer;
+    box-shadow: 0 10px 25px rgba(0,0,0,0.05);
+}
+
+.drop-zone:hover, .drop-zone.drag-over {
+    border-color: #0d6efd;
+    background-color: #f8fbff;
+    transform: translateY(-2px);
+}
+
+.drop-zone i {
+    font-size: 3.5rem;
+    color: #0d6efd;
+    margin-bottom: 15px;
+    display: block;
+}
+
+.drop-zone h5 {
+    font-weight: 700;
+    color: #2d3748;
+}
+
+#file-input {
+    display: none;
+}
+
+/* Info Cards */
+.info-card {
+    background: #fff;
+    border-radius: 12px;
+    padding: 20px;
+    height: 100%;
+    border-left: 4px solid #0d6efd;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.03);
+}
+
+.info-card i {
+    font-size: 1.5rem;
+    color: #0d6efd;
+    margin-bottom: 10px;
+    display: block;
+}
+
+.info-card h6 {
+    font-weight: 700;
+    margin-bottom: 8px;
+}
+
+.info-card p {
+    font-size: 0.85rem;
+    color: #718096;
+    margin-bottom: 0;
+}
+
+/* Form & Matrix Styling */
+.ip-input {
+    min-width: 130px;
+    font-family: 'Courier New', monospace;
+    font-size: 0.85rem;
+    border-radius: 4px;
+    border: 1px solid #ced4da;
+    transition: all 0.2s ease-in-out;
+}
+
+.ip-input:focus {
+    border-color: #0d6efd;
+    box-shadow: 0 0 0 0.25rem rgba(13, 110, 253, 0.1);
+    background-color: #fff;
+}
+
+.hostname-input {
+    min-width: 220px;
+    font-weight: bold;
+    border-left: 5px solid #0d6efd !important;
+}
+
+.sticky-thead th {
+    position: sticky;
+    top: 0;
+    background-color: #ffffff;
+    z-index: 10;
+    border-bottom: 2px solid #0d6efd;
+    box-shadow: 0 2px 5px rgba(0,0,0,0.05);
+}
+
+.card-custom {
+    border: none;
+    border-radius: 12px;
+    box-shadow: 0 8px 24px rgba(149, 157, 165, 0.2);
+}
+
+.bmc-container {
+    text-align: center;
+    margin-top: 50px;
+    padding-bottom: 30px;
+}
+
+/* Debug / Metadata text */
+.debug-text {
+    font-family: 'Courier New', Courier, monospace;
+    font-size: 0.7rem;
+    color: #a0aec0;
+}
