@@ -52,12 +52,16 @@ function setupFileUploadHandlers() {
 }
 
 /**
- * Validates that all IP, Mask, and Hostname fields are filled.
- * Prevents form submission if any field contains default/empty values.
+ * Validates that all IP, Mask, and Hostname fields are filled correctly.
+ * Utilizes Regex for strict IPv4 format validation.
+ * Prevents form submission if any field is invalid.
  */
 function setupFormValidation() {
     const configForm = document.querySelector('form[action="/generate-json"]');
     if (!configForm) return;
+
+    // Standard IPv4 Regex pattern (Validates 0.0.0.0 through 255.255.255.255)
+    const ipv4Regex = /^(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)\.(25[0-5]|2[0-4][0-9]|[01]?[0-9][0-9]?)$/;
 
     configForm.addEventListener('submit', (e) => {
         // Select all inputs that are part of the configuration matrix
@@ -67,9 +71,20 @@ function setupFormValidation() {
 
         inputs.forEach(input => {
             const val = input.value.trim();
+            let isInvalidValue = false;
 
-            // Check for empty, null, or default "placeholder" values
-            const isInvalidValue = !val || val === "" || val === "0.0.0.0";
+            // Apply different validation rules based on field type
+            if (input.classList.contains('ip-input')) {
+                // Check if empty, default, or fails IPv4 regex validation
+                if (!val || val === "0.0.0.0" || !ipv4Regex.test(val)) {
+                    isInvalidValue = true;
+                }
+            } else {
+                // Standard empty check for hostnames or other fields
+                if (!val || val === "") {
+                    isInvalidValue = true;
+                }
+            }
 
             if (isInvalidValue) {
                 isValid = false;
@@ -101,7 +116,7 @@ function setupFormValidation() {
 
             submitBtn.disabled = true;
             submitBtn.classList.replace('btn-success', 'btn-danger');
-            submitBtn.innerHTML = '<i class="bi bi-exclamation-octagon-fill me-2"></i> Error: Missing Data';
+            submitBtn.innerHTML = '<i class="bi bi-exclamation-octagon-fill me-2"></i> Error: Invalid Data';
 
             setTimeout(() => {
                 submitBtn.disabled = false;
@@ -113,10 +128,23 @@ function setupFormValidation() {
         }
     });
 
-    // Remove error styling instantly when the user starts correcting the field
+    // Remove error styling instantly when the user corrects the field
     configForm.addEventListener('input', (e) => {
         if (e.target.tagName === 'INPUT') {
-            if (e.target.value.trim() !== "" && e.target.value.trim() !== "0.0.0.0") {
+            const val = e.target.value.trim();
+            let isNowValid = true;
+
+            if (e.target.classList.contains('ip-input')) {
+                if (!val || val === "0.0.0.0" || !ipv4Regex.test(val)) {
+                    isNowValid = false;
+                }
+            } else {
+                if (!val || val === "") {
+                    isNowValid = false;
+                }
+            }
+
+            if (isNowValid) {
                 e.target.style.border = '';
                 e.target.style.backgroundColor = '';
                 e.target.classList.remove('is-invalid');
