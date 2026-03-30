@@ -1,19 +1,19 @@
 /**
  * =================================================================
  * Cluster Config Forge - Core JavaScript
-# Author: Brian Knutsson - CRIT Solutions ApS
+ * Author: Brian Knutsson - CRIT Solutions ApS
  * Description: Handles UI interactions, drag-and-drop uploads,
- * and auto-sequencing logic for host configurations.
+ * auto-sequencing, and strict form validation.
  * =================================================================
  */
 
 document.addEventListener('DOMContentLoaded', () => {
     setupFileUploadHandlers();
+    setupFormValidation();
 });
 
 /**
  * Setup File Upload Handlers for Drag and Drop functionality.
- * Supports both automatic submission on file selection and manual dropping.
  */
 function setupFileUploadHandlers() {
     const dropZone = document.getElementById('drop-zone');
@@ -21,23 +21,19 @@ function setupFileUploadHandlers() {
     const uploadForm = document.getElementById('upload-form');
 
     if (dropZone && fileInput && uploadForm) {
-        // Trigger file dialog on click
         dropZone.addEventListener('click', () => fileInput.click());
 
-        // Handle dragover visual feedback
         dropZone.addEventListener('dragover', (e) => {
             e.preventDefault();
             dropZone.classList.add('drag-over');
         });
 
-        // Remove styling when drag leaves or ends
         ['dragleave', 'dragend'].forEach(type => {
             dropZone.addEventListener(type, () => {
                 dropZone.classList.remove('drag-over');
             });
         });
 
-        // Handle dropped files and submit immediately
         dropZone.addEventListener('drop', (e) => {
             e.preventDefault();
             dropZone.classList.remove('drag-over');
@@ -47,7 +43,6 @@ function setupFileUploadHandlers() {
             }
         });
 
-        // Submit form automatically when a file is selected via browser dialog
         fileInput.addEventListener('change', () => {
             if (fileInput.files.length) {
                 uploadForm.submit();
@@ -57,12 +52,85 @@ function setupFileUploadHandlers() {
 }
 
 /**
+ * Validates that all IP, Mask, and Hostname fields are filled.
+ * Prevents form submission if any field contains default/empty values.
+ */
+function setupFormValidation() {
+    const configForm = document.querySelector('form[action="/generate-json"]');
+    if (!configForm) return;
+
+    configForm.addEventListener('submit', (e) => {
+        // Select all inputs that are part of the configuration matrix
+        const inputs = configForm.querySelectorAll('input[type="text"]');
+        let isValid = true;
+        let firstErrorField = null;
+
+        inputs.forEach(input => {
+            const val = input.value.trim();
+
+            // Check for empty, null, or default "placeholder" values
+            const isInvalidValue = !val || val === "" || val === "0.0.0.0";
+
+            if (isInvalidValue) {
+                isValid = false;
+                input.classList.add('is-invalid');
+                input.style.border = '2px solid #e53e3e'; // Bright red border
+                input.style.backgroundColor = '#fff5f5'; // Light red background
+
+                if (!firstErrorField) firstErrorField = input;
+            } else {
+                input.classList.remove('is-invalid');
+                input.style.border = '';
+                input.style.backgroundColor = '';
+            }
+        });
+
+        if (!isValid) {
+            // STOP the form from submitting
+            e.preventDefault();
+            e.stopPropagation();
+
+            if (firstErrorField) {
+                firstErrorField.focus();
+                firstErrorField.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            }
+
+            // UI Feedback on the submit button
+            const submitBtn = configForm.querySelector('button[type="submit"]');
+            const originalContent = submitBtn.innerHTML;
+
+            submitBtn.disabled = true;
+            submitBtn.classList.replace('btn-success', 'btn-danger');
+            submitBtn.innerHTML = '<i class="bi bi-exclamation-octagon-fill me-2"></i> Error: Missing Data';
+
+            setTimeout(() => {
+                submitBtn.disabled = false;
+                submitBtn.classList.replace('btn-danger', 'btn-success');
+                submitBtn.innerHTML = originalContent;
+            }, 3000);
+
+            return false;
+        }
+    });
+
+    // Remove error styling instantly when the user starts correcting the field
+    configForm.addEventListener('input', (e) => {
+        if (e.target.tagName === 'INPUT') {
+            if (e.target.value.trim() !== "" && e.target.value.trim() !== "0.0.0.0") {
+                e.target.style.border = '';
+                e.target.style.backgroundColor = '';
+                e.target.classList.remove('is-invalid');
+            }
+        }
+    });
+}
+
+/**
  * Auto-increments IP addresses based on the first row's value.
- * Sequences the 4th octet sequentially downward or upward based on position.
- * * @param {string} vmkDevice - Identifier for the interface (e.g., vmk0)
+ * Also copies the subnet mask from the first row to all subsequent rows.
+ * @param {string} vmkDevice - Identifier for the interface (e.g., vmk0)
  */
 function autoSequenceIP(vmkDevice) {
-    // Select all IP fields and Mask fields for this specific vmk
     const ipFields = document.querySelectorAll('.vmk-ip-' + vmkDevice);
     const maskFields = document.querySelectorAll('.vmk-mask-' + vmkDevice);
 
@@ -75,6 +143,7 @@ function autoSequenceIP(vmkDevice) {
     if (parts.length !== 4) return;
 
     let lastOctet = parseInt(parts[3]);
+    if (isNaN(lastOctet)) return;
 
     ipFields.forEach((f, i) => {
         if (i > 0) {
@@ -94,51 +163,41 @@ function autoSequenceIP(vmkDevice) {
 
 /**
  * Auto-sequences hostnames based on the first row.
- * Detects numeric suffixes (e.g., esx01) and increments them while maintaining padding.
  */
 function autoSequenceHostname() {
     const fields = document.querySelectorAll('.hostname-field');
     if (fields.length === 0) return;
 
     const first = fields[0].value;
-
-    // Regex to extract prefix and numeric suffix
     const match = first.match(/^(.*?)(\d+)$/);
-    if (!match) {
-        console.info('No numeric suffix found in hostname to sequence');
-        return;
-    }
+    if (!match) return;
 
     const prefix = match[1];
     const startNum = parseInt(match[2]);
     const padLen = match[2].length;
 
-    fields.forEach((field, index) => {
-        if (index > 0) {
-            // Calculate next number and pad with leading zeros to maintain original format
-            let num = (startNum + index).toString().padStart(padLen, '0');
-            field.value = prefix + num;
-            highlightField(field);
+    fields.forEach((f, i) => {
+        if (i > 0) {
+            let num = (startNum + i).toString().padStart(padLen, '0');
+            f.value = prefix + num;
+            highlightField(f);
         }
     });
 }
 
 /**
  * Provides temporary visual feedback by highlighting an updated field.
- * * @param {HTMLElement} element - The HTML input element to highlight.
  */
-function highlightField(element) {
-    // Add smooth transition if not already handled by CSS
-    element.style.transition = 'background-color 0.4s ease, border-color 0.4s ease';
+function highlightField(f) {
+    f.style.transition = 'background-color 0.3s, border-color 0.3s';
+    f.style.backgroundColor = '#e6fffa';
+    f.style.borderColor = '#38b2ac';
 
-    // Success teal highlight (based on Bootstrap/Modern palette)
-    element.style.backgroundColor = '#e6fffa';
-    element.style.borderColor = '#38b2ac';
-    element.style.boxShadow = '0 0 0 0.2rem rgba(56, 178, 172, 0.25)';
+    // Clear error states if they existed
+    f.classList.remove('is-invalid');
 
     setTimeout(() => {
-        element.style.backgroundColor = '';
-        element.style.borderColor = '';
-        element.style.boxShadow = '';
-    }, 1200);
+        f.style.backgroundColor = '';
+        f.style.borderColor = '';
+    }, 1000);
 }
